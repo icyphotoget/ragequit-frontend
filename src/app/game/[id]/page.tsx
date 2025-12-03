@@ -63,6 +63,13 @@ type RageClip = {
   thumbnail_url?: string | null;
 };
 
+type UserClip = {
+  id: number;
+  url: string;
+  title?: string | null;
+  created_at?: string | null;
+};
+
 //
 // Page component
 //
@@ -80,12 +87,24 @@ export default function GamePage() {
   const [rageWords, setRageWords] = useState<RageWord[]>([]);
   const [rageTimeline, setRageTimeline] = useState<RagePoint[]>([]);
   const [rageClips, setRageClips] = useState<RageClip[]>([]);
+  const [userClips, setUserClips] = useState<UserClip[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Supabase user + favorites
   const [userId, setUserId] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
+
+  // Rage log form
+  const [rageIntensity, setRageIntensity] = useState(3);
+  const [rageNote, setRageNote] = useState("");
+  const [savingRage, setSavingRage] = useState(false);
+  const [rageSaveMessage, setRageSaveMessage] = useState<string | null>(null);
+
+  // Clip form
+  const [clipUrl, setClipUrl] = useState("");
+  const [clipTitle, setClipTitle] = useState("");
+  const [savingClip, setSavingClip] = useState(false);
 
   //
   // Load game + rage data from backend
@@ -167,7 +186,7 @@ export default function GamePage() {
   }, [id]);
 
   //
-  // Load Supabase user + favorite state
+  // Load Supabase user + favorite state and user clips
   //
   useEffect(() => {
     const loadUserAndFavorite = async () => {
@@ -198,7 +217,25 @@ export default function GamePage() {
       setIsFavorite(!!data);
     };
 
+    const loadUserClips = async () => {
+      if (!id) return;
+      const { data, error } = await supabase
+        .from("user_clips")
+        .select("id, url, title, created_at")
+        .eq("game_id", Number(id))
+        .order("created_at", { ascending: false })
+        .limit(12);
+
+      if (error) {
+        console.error("user clips load error", error);
+        return;
+      }
+
+      setUserClips(data ?? []);
+    };
+
     loadUserAndFavorite();
+    loadUserClips();
   }, [id]);
 
   const toggleFavorite = async () => {
@@ -228,6 +265,68 @@ export default function GamePage() {
       console.error("favorite toggle error", err);
     } finally {
       setFavLoading(false);
+    }
+  };
+
+  const submitRageEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId || !id) {
+      alert("Log in on /auth to log your rage.");
+      return;
+    }
+    setSavingRage(true);
+    setRageSaveMessage(null);
+    try {
+      const { error } = await supabase.from("rage_events").insert({
+        user_id: userId,
+        game_id: Number(id),
+        intensity: rageIntensity,
+        note: rageNote.trim() || null,
+        trigger: null,
+      });
+      if (error) throw error;
+      setRageNote("");
+      setRageIntensity(3);
+      setRageSaveMessage("Rage logged! Check /account to see your history.");
+    } catch (err) {
+      console.error("rage insert error", err);
+      setRageSaveMessage("Failed to log rage.");
+    } finally {
+      setSavingRage(false);
+    }
+  };
+
+  const submitClip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId || !id) {
+      alert("Log in on /auth to upload clips.");
+      return;
+    }
+    if (!clipUrl.trim()) return;
+    setSavingClip(true);
+    try {
+      const { data, error } = await supabase
+        .from("user_clips")
+        .insert({
+          user_id: userId,
+          game_id: Number(id),
+          url: clipUrl.trim(),
+          title: clipTitle.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setUserClips((prev) => [data, ...prev]);
+      }
+      setClipUrl("");
+      setClipTitle("");
+    } catch (err) {
+      console.error("clip insert error", err);
+    } finally {
+      setSavingClip(false);
     }
   };
 
@@ -334,39 +433,100 @@ export default function GamePage() {
             <RageBar label="UI / Design" value={r.ui_design_rage} />
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-            <h2 className="mb-4 text-sm font-semibold tracking-wide text-slate-200">
-              Biggest Rage Choke (Achievements)
-            </h2>
-            {r.max_achievement_drop ? (
-              <div className="space-y-2 text-xs">
-                <p>
-                  The largest drop in players is{" "}
-                  <span className="font-semibold">
-                    {r.max_achievement_drop.toFixed(1)}%
-                  </span>{" "}
-                  at:
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <h2 className="mb-4 text-sm font-semibold tracking-wide text-slate-200">
+                Biggest Rage Choke (Achievements)
+              </h2>
+              {r.max_achievement_drop ? (
+                <div className="space-y-2 text-xs">
+                  <p>
+                    The largest drop in players is{" "}
+                    <span className="font-semibold">
+                      {r.max_achievement_drop.toFixed(1)}%
+                    </span>{" "}
+                    at:
+                  </p>
+                  <p className="text-sm font-semibold text-slate-100">
+                    {r.max_drop_achievement ?? "Unknown achievement"}
+                  </p>
+                  <p className="text-slate-400">
+                    Completion falls from{" "}
+                    <span className="font-semibold">
+                      {r.max_drop_from?.toFixed(1)}%
+                    </span>{" "}
+                    to{" "}
+                    <span className="font-semibold">
+                      {r.max_drop_to?.toFixed(1)}%
+                    </span>
+                    , which is a strong indicator of a rage / difficulty spike.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  Not enough achievement data yet to determine a choke point.
                 </p>
-                <p className="text-sm font-semibold text-slate-100">
-                  {r.max_drop_achievement ?? "Unknown achievement"}
+              )}
+            </div>
+
+            {/* Rage log form */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-red-300">
+                Log your rage
+              </h2>
+              {userId ? (
+                <form onSubmit={submitRageEvent} className="space-y-2 text-xs">
+                  <div>
+                    <label className="mb-1 block text-[11px] text-slate-300">
+                      Intensity (1–5)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min={1}
+                        max={5}
+                        value={rageIntensity}
+                        onChange={(e) =>
+                          setRageIntensity(Number(e.target.value))
+                        }
+                        className="flex-1"
+                      />
+                      <span className="w-6 text-center text-[11px] text-red-300">
+                        {rageIntensity}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] text-slate-300">
+                      What happened?
+                    </label>
+                    <textarea
+                      className="min-h-[60px] w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-red-400"
+                      placeholder="Describe the boss, level, lag spike, or bullshit moment..."
+                      value={rageNote}
+                      onChange={(e) => setRageNote(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={savingRage}
+                    className="rounded-md bg-red-500 px-3 py-1 text-[11px] font-semibold text-slate-950 hover:bg-red-400 disabled:opacity-60"
+                  >
+                    {savingRage ? "Saving..." : "Save rage event"}
+                  </button>
+                  {rageSaveMessage && (
+                    <p className="text-[10px] text-slate-400">
+                      {rageSaveMessage}
+                    </p>
+                  )}
+                </form>
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  Log in on <a href="/auth" className="text-emerald-300 underline underline-offset-4 hover:text-emerald-100">/auth</a>{" "}
+                  to track your rage log for this game.
                 </p>
-                <p className="text-slate-400">
-                  Completion falls from{" "}
-                  <span className="font-semibold">
-                    {r.max_drop_from?.toFixed(1)}%
-                  </span>{" "}
-                  to{" "}
-                  <span className="font-semibold">
-                    {r.max_drop_to?.toFixed(1)}%
-                  </span>
-                  , which is a strong indicator of a rage / difficulty spike.
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400">
-                Not enough achievement data yet to determine a choke point.
-              </p>
-            )}
+              )}
+            </div>
           </div>
         </section>
 
@@ -437,19 +597,52 @@ export default function GamePage() {
           )}
         </section>
 
-        {/* Rage Clips */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/80 p-5">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-red-300">
+        {/* Rage Clips (backend + user clips) */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-950/80 p-5 space-y-4">
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-red-300">
             Rage Clips
           </h2>
-          {rageClips.length === 0 ? (
+
+          {userId && (
+            <form onSubmit={submitClip} className="mb-3 space-y-2 text-xs">
+              <p className="text-[11px] text-slate-300">
+                Drop a YouTube link or any clip URL from your latest meltdown:
+              </p>
+              <input
+                type="url"
+                value={clipUrl}
+                onChange={(e) => setClipUrl(e.target.value)}
+                placeholder="https://youtu.be/..."
+                className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-red-400"
+              />
+              <input
+                type="text"
+                value={clipTitle}
+                onChange={(e) => setClipTitle(e.target.value)}
+                placeholder="Optional title (e.g. Malenia Phase 2 breakdown)"
+                className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-red-400"
+              />
+              <button
+                type="submit"
+                disabled={savingClip || !clipUrl.trim()}
+                className="rounded-md bg-sky-500 px-3 py-1 text-[11px] font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-60"
+              >
+                {savingClip ? "Saving clip..." : "Upload clip URL"}
+              </button>
+            </form>
+          )}
+
+          {rageClips.length === 0 && userClips.length === 0 ? (
             <p className="text-xs text-slate-500">
               No clips added yet for this game.
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {rageClips.map((clip) => (
-                <RageClipCard key={clip.id} clip={clip} />
+                <RageClipCard key={`backend-${clip.id}`} clip={clip} />
+              ))}
+              {userClips.map((clip) => (
+                <UserClipCard key={`user-${clip.id}`} clip={clip} />
               ))}
             </div>
           )}
@@ -658,6 +851,58 @@ function RageClipCard({ clip }: { clip: RageClip }) {
         >
           Open clip →
         </a>
+      )}
+    </article>
+  );
+}
+
+function UserClipCard({ clip }: { clip: UserClip }) {
+  const isYouTube =
+    clip.url.includes("youtube.com") || clip.url.includes("youtu.be");
+
+  let embedUrl = clip.url;
+  if (isYouTube) {
+    const match = clip.url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+    const vid = match?.[1];
+    if (vid) {
+      embedUrl = `https://www.youtube.com/embed/${vid}`;
+    }
+  }
+
+  return (
+    <article className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-xs">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="line-clamp-1 text-[11px] font-semibold text-slate-50">
+          {clip.title ?? "Player rage clip"}
+        </span>
+        <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500">
+          player
+        </span>
+      </div>
+      {isYouTube ? (
+        <div className="aspect-video w-full overflow-hidden rounded-lg border border-slate-800">
+          <iframe
+            src={embedUrl}
+            title={clip.title ?? "Rage clip"}
+            className="h-full w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      ) : (
+        <a
+          href={clip.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex text-[11px] text-sky-400 underline underline-offset-4 hover:text-sky-200"
+        >
+          Open clip →
+        </a>
+      )}
+      {clip.created_at && (
+        <p className="mt-1 text-[9px] text-slate-500">
+          Added {new Date(clip.created_at).toLocaleDateString()}
+        </p>
       )}
     </article>
   );
