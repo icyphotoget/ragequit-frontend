@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 //
 // Types
@@ -81,6 +82,14 @@ export default function GamePage() {
   const [rageClips, setRageClips] = useState<RageClip[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Supabase user + favorites
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
+
+  //
+  // Load game + rage data from backend
+  //
   useEffect(() => {
     const loadGame = async () => {
       if (!id) {
@@ -98,7 +107,15 @@ export default function GamePage() {
         const timelineUrl = `${base}/games/${id}/rage-timeline`;
         const clipsUrl = `${base}/games/${id}/clips`;
 
-        console.log("Fetching:", gameUrl, reviewsUrl, redditUrl, wordsUrl, timelineUrl, clipsUrl);
+        console.log(
+          "Fetching:",
+          gameUrl,
+          reviewsUrl,
+          redditUrl,
+          wordsUrl,
+          timelineUrl,
+          clipsUrl,
+        );
 
         const [
           gameRes,
@@ -117,7 +134,11 @@ export default function GamePage() {
         ]);
 
         if (!gameRes.ok) {
-          console.error("Game fetch failed:", gameRes.status, gameRes.statusText);
+          console.error(
+            "Game fetch failed:",
+            gameRes.status,
+            gameRes.statusText,
+          );
           setGame(null);
           return;
         }
@@ -144,6 +165,75 @@ export default function GamePage() {
 
     loadGame();
   }, [id]);
+
+  //
+  // Load Supabase user + favorite state
+  //
+  useEffect(() => {
+    const loadUserAndFavorite = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session || !id) {
+        setUserId(null);
+        setIsFavorite(false);
+        return;
+      }
+
+      setUserId(session.user.id);
+
+      const { data, error } = await supabase
+        .from("favorite_games")
+        .select("id")
+        .eq("user_id", session.user.id)
+        .eq("game_id", Number(id))
+        .maybeSingle();
+
+      if (error) {
+        console.error("favorite check error", error);
+        return;
+      }
+
+      setIsFavorite(!!data);
+    };
+
+    loadUserAndFavorite();
+  }, [id]);
+
+  const toggleFavorite = async () => {
+    if (!userId || !id) {
+      alert("Log in on /auth to favorite games.");
+      return;
+    }
+    setFavLoading(true);
+    try {
+      if (!isFavorite) {
+        const { error } = await supabase.from("favorite_games").insert({
+          user_id: userId,
+          game_id: Number(id),
+        });
+        if (error) throw error;
+        setIsFavorite(true);
+      } else {
+        const { error } = await supabase
+          .from("favorite_games")
+          .delete()
+          .eq("user_id", userId)
+          .eq("game_id", Number(id));
+        if (error) throw error;
+        setIsFavorite(false);
+      }
+    } catch (err) {
+      console.error("favorite toggle error", err);
+    } finally {
+      setFavLoading(false);
+    }
+  };
+
+  //
+  // Render
+  //
 
   if (loading) {
     return (
@@ -196,6 +286,21 @@ export default function GamePage() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Favorite button (only shown if user is logged in) */}
+            {userId && (
+              <button
+                onClick={toggleFavorite}
+                disabled={favLoading}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  isFavorite
+                    ? "border-yellow-400 text-yellow-300"
+                    : "border-slate-600 text-slate-300"
+                }`}
+              >
+                {isFavorite ? "★ Favorited" : "☆ Add to favorites"}
+              </button>
+            )}
+
             <div className="relative h-28 w-28">
               <div
                 className="absolute inset-0 rounded-full"

@@ -66,6 +66,12 @@ export default function HomePage() {
               Open rage duel →
             </a>
             <a
+  href="/auth"
+  className="inline-flex text-xs text-emerald-300 hover:text-emerald-100 underline underline-offset-4"
+>
+  Log in / Sign up →
+</a>
+            <a
               href="/leaderboards"
               className="inline-flex text-sky-400 hover:text-sky-200 underline underline-offset-4"
             >
