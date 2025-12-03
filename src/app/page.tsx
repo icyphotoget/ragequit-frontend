@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UserButton } from "@/components/UserButton";
 
 type GameSummary = {
   id: number;
@@ -53,33 +54,37 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50">
       <div className="mx-auto max-w-4xl px-4 py-10 space-y-6">
-        <header>
-          <h1 className="text-3xl font-extrabold tracking-tight">RageQuit.io</h1>
-          <p className="text-sm text-slate-400">
-            Ranking games by how much they make players rage.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-4 text-xs">
-            <a
-              href="/compare"
-              className="inline-flex text-fuchsia-400 hover:text-fuchsia-200 underline underline-offset-4"
-            >
-              Open rage duel →
-            </a>
-            <a
-  href="/auth"
-  className="inline-flex text-xs text-emerald-300 hover:text-emerald-100 underline underline-offset-4"
->
-  Log in / Sign up →
-</a>
-            <a
-              href="/leaderboards"
-              className="inline-flex text-sky-400 hover:text-sky-200 underline underline-offset-4"
-            >
-              View global rage leaderboards →
-            </a>
+        
+        {/* HEADER */}
+        <header className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight">RageQuit.io</h1>
+            <p className="text-sm text-slate-400">
+              Ranking games by how much they make players rage.
+            </p>
+
+            <div className="mt-2 flex flex-wrap gap-4 text-xs">
+              <a
+                href="/compare"
+                className="inline-flex text-fuchsia-400 hover:text-fuchsia-200 underline underline-offset-4"
+              >
+                Open rage duel →
+              </a>
+
+              <a
+                href="/leaderboards"
+                className="inline-flex text-sky-400 hover:text-sky-200 underline underline-offset-4"
+              >
+                View global rage leaderboards →
+              </a>
+            </div>
           </div>
+
+          {/* AUTH BUTTON (Login / Signup / Logout) */}
+          <UserButton />
         </header>
 
+        {/* CONTENT */}
         {loading && (
           <p className="text-sm text-slate-400">Loading games…</p>
         )}
